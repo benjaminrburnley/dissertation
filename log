@@ -1,0 +1,25 @@
+LOG 
+
+20231010 --------
+started repository 
+downloaded voteview files 
+downloaded most recent version of MDI Elections git 
+began cleaning for 116th congress 
+---- issues  ----
+- Campaign_03_2019.csv - only one url in the `quote_url` column. this is causing parsing issues 
+--- fixed by specficying the column type as character instead of logical 
+- Campaign_06_2019.csv - same as above 
+--- fixed 
+- Campaign_05_2020.csv - same problem
+--- fixed 
+- Campaign_06_2020.csv - same problem
+--- fixed 
+- Campaign_07_2020.csv - same problem
+--- fixed 
+- Campaign_10_2020.csv - same problem
+--- fixed 
+- Campaign_11_2020.csv - same problem
+--- fixed 
+- data columns varying by dataframe 
+
+
