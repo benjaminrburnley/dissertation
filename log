@@ -21,5 +21,8 @@ began cleaning for 116th congress
 - Campaign_11_2020.csv - same problem
 --- fixed 
 - data columns varying by dataframe 
-
+- a number of `week` columns were reading in as character
+--- fixed with col_types = col(week = "d")
+- dates parsed incorrectly 
+--- lubridate mdy()
 

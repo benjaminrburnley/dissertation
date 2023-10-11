@@ -124,10 +124,10 @@ congress_116 = c_19 %>%
 
 
 congress_116 %>% 
-  group_by(date) %>% 
+  mutate(day = day(date)) %>% 
+  group_by(day, year) %>% 
   summarize(n = n()) %>% 
-  mutate(year = year(date)) %>% 
-  ggplot(aes(date, n))+
+  ggplot(aes(day, n, color = factor(year)))+
   geom_point()+
   geom_line()
 
