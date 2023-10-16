@@ -1,5 +1,16 @@
 LOG 
 
+20231016 --------
+working on quality checks for all variables in 116th data 
+date - good 
+time - 341 non-finite values 
+----
+
+20231012 --------
+continued on 117th congress import
+date and date scraped categories being weird
+
+
 20231010 --------
 started repository 
 downloaded voteview files 

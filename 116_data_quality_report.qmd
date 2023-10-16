@@ -1,0 +1,155 @@
+---
+title: "116th Congress Tweet Dataset"
+subtitle: "Quality Assessment Report"
+author: "Ben Burnley"
+date: "October 16, 2023"
+format: 
+  html:
+    self-contained: true
+message: false
+---
+
+# Introduction 
+This document contains the data quality checks I performed to guarantee the data did not have large amounts of missingness or other issues. 
+
+
+
+```{r}
+#| echo: false
+#| message: false
+# libraries 
+library(tidyverse)
+library(lubridate)
+library(kableExtra)
+# load in data 
+load("data/congress_116.Rdata")
+# theme 
+my_theme = theme_minimal()+
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(face = "italic")
+  )
+```
+
+
+# 116th Congress 
+
+### Date 
+```{r}
+#| include: false
+class(congress_116$date)
+length(unique(congress_116$date))
+sum(is.na(congress_116$date))
+```
+
+The date column is formatted correctly and contains the correct amount of days from the time period of interest: 731 days, 365 in 2019 and 366 in 2020. There do not seem to be any discrepancies in the data. The plot below shows the total number of tweets per day across the two years of study.
+
+```{r}
+#| echo: false
+#| message: false
+congress_116 %>% 
+  group_by(date) %>% 
+  summarize(n = n()) %>% 
+  ggplot(aes(date, n))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(color = "red", se = F)+
+  labs(
+    title = "Total Tweets Per Day",
+    x = "Day",
+    y = "Count of Tweets"
+  )+
+  my_theme
+```
+
+### Time 
+```{r}
+#| include: false
+# class of variable 
+class(congress_116$time)
+# percent of data that is missing time of tweet
+sum(!is.finite(congress_116$time))/nrow(congress_116) 
+```
+
+About 2% of the data is missing a time recorded. This is not a parsing error, the underlying data is missing a time. 
+
+```{r}
+#| echo: false
+#| message: false
+
+congress_116 %>% 
+  group_by(date) %>% 
+  summarize(finites = sum(!is.finite(time)), tweets = n()) %>% 
+  ggplot()+
+  geom_line(aes(date, finites))+
+  geom_line(aes(date, tweets), color = "red", alpha = 0.2)+
+  labs(
+    title = "Missingness Across Sample",
+    subtitle = "Total Tweets in Red, Tweets with Missing Time in Black",
+    x = "Date",
+    y = "Count"
+  )+
+  my_theme
+```
+```{r}
+#| echo: false
+#| message: false
+
+# how many account have missingness 
+congress_116 %>% 
+  group_by(username) %>% 
+  summarize(total = n(), missing = sum(!is.finite(time)), pct_missing = missing/total) %>% 
+  arrange(desc(pct_missing)) %>% 
+  ggplot(aes(pct_missing)) +
+  geom_histogram(fill = "red")+
+  theme_minimal()+
+  labs(
+    title = "Percent Missing by Account",
+    x = "Percent Missing",
+    y = "Number of Accounts"
+  )
+```
+Missingness is associate with account. With the exception of 3 accounts, time is either 100% present or missing. Path forward may be to separate out these accounts for analyses to see if they are impacting results. 
+
+### Username 
+```{r}
+#| include: false
+class(congress_116$username)
+length(unique(congress_116$username))
+sum(is.na(congress_116$username))
+```
+
+Usernames are represented by the unique character string associated with the account. There are 2200 unique user names in the data set. There is no missingness present in this variable. The table below displays the top 10 usernames by total tweets. 
+```{r}
+#| echo: false
+x1 = congress_116 %>% 
+  group_by(username) %>% 
+  summarize(total_tweets = n()) %>% 
+  arrange(desc(total_tweets)) %>% 
+  head(10)
+
+kable(x1, col.names = c("Username", "Total # of Tweets"))
+```
+
+### Name 
+```{r}
+#| include: false 
+
+class(congress_116$name)
+sum(is.na(congress_116$name))
+sum(is.na(congress_116$name))/nrow(congress_116)
+```
+
+The name 
+
+```{r}
+#| echo: false 
+
+congress_116 %>% 
+  filter(!is.na(name)) %>% 
+  group_by(name) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n)) %>% 
+  kable(col.names = c("Name", "Total # of Tweets"))
+  
+```
+

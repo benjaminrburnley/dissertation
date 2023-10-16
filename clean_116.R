@@ -122,17 +122,7 @@ o_20 = o_01_20 %>%
 congress_116 = c_19 %>% 
   bind_rows(c_20, o_19, o_20)
 
+save(congress_116, file = "data/congress_116.Rdata")
 
-congress_116 %>% 
-  mutate(day = day(date)) %>% 
-  group_by(day, year) %>% 
-  summarize(n = n()) %>% 
-  ggplot(aes(day, n, color = factor(year)))+
-  geom_point()+
-  geom_line()
-
-
-
-  
 
 
