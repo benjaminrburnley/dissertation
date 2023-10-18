@@ -139,7 +139,7 @@ sum(is.na(congress_116$name))
 sum(is.na(congress_116$name))/nrow(congress_116)
 ```
 
-The name 
+The name variable contains the account's display name at the time of scraping. This is a character string the may differ from the actual username of the account. About 2% of the data has missingness in this column. The top accounts, by total tweets, are shown below. These match with the usernames shown above. 
 
 ```{r}
 #| echo: false 
@@ -149,7 +149,16 @@ congress_116 %>%
   group_by(name) %>% 
   summarize(n = n()) %>% 
   arrange(desc(n)) %>% 
+  head(10) %>% 
   kable(col.names = c("Name", "Total # of Tweets"))
   
+```
+
+### Language 
+```{r}
+#| include: false
+class(congress_116$language)
+sum(is.na(congress_116$language))
+sum(is.na(congress_116$language))/nrow(congress_116)
 ```
 

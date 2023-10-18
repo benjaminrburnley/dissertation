@@ -23,11 +23,15 @@
 # libraries ---------------------------------------------------------------
 library(tidyverse)
 library(lubridate)
+library(readxl)
+library(stringr)
 
 
 # data --------------------------------------------------------------------
 # voteview collection of all memebers and their ideal points 
-c116 = read_csv("data/116_congress.csv")
+c116 = read_csv("data/116_congress.csv") 
+bio = read_xlsx("data/Main_candidate_information_2020Congress.xlsx") %>% 
+  mutate(icpsr = as.numeric(icpsr))
 
 ####  twitter data collected by MDI - pulled on October 10, 2023
 
@@ -119,8 +123,25 @@ o_20 = o_01_20 %>%
          date = mdy(date))                   # correct error in dates                      
 
 # merge aggregated 
-congress_116 = c_19 %>% 
+all_116 = c_19 %>% 
   bind_rows(c_20, o_19, o_20)
+
+
+# filtering ---------------------------------------------------------------
+
+# filter bio data for members of DW-Nominate data set 
+stems_c116 = c116 %>% 
+  anti_join(bio, by = "icpsr")
+
+
+names = unique(tweets_116$name)
+stems = unique(tweets_116$candStem)
+
+str_view(names, "Jones", html = T)
+str_view(stems, "roby", html = T)
+
+
+
 
 save(congress_116, file = "data/congress_116.Rdata")
 

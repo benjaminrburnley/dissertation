@@ -1,10 +1,16 @@
 LOG 
 
+20231017 --------
+continued working on quality assurance 
+discovered missing accounts for each congress:
+-- 116th has 54 missing accounts 
+-- 117th has 30 missing accounts 
+
 20231016 --------
 working on quality checks for all variables in 116th data 
 date - good 
 time - 341 non-finite values 
-----
+
 
 20231012 --------
 continued on 117th congress import
