@@ -1,0 +1,76 @@
+---
+title: "Build 116th Electoral Outcomes Dataset"
+format: 
+  html:
+    self-contained: true
+---
+
+```{r}
+# libraries 
+library(tidyverse)
+library(haven)
+
+# data
+c116 = read_csv("data/116_congress.csv")
+house_les = read_dta("data/house_les.dta")
+senate_les = read_dta("data/senate_les.dta")
+house_import = read_csv("data/house/1976-2022-house.csv")
+sen_import = read_csv("data/senate/1976-2020-senate.csv")
+```
+
+```{r}
+## get relevant dwnominate data
+dw_nominate = c116 |>
+  select(icpsr, bioguide_id, state_icpsr, district_code, state_abbrev, bioname, chamber, born, died, 
+         nominate_dim1, nominate_dim2, party_leader, committee_leader, election_year) |> 
+  filter(chamber != "President")
+```
+
+```{r}
+## get relevant les data 
+house_filtered = house_les |> 
+  filter(congress == 116) |> 
+  select(icpsr, elected, female, speaker, subchr, afam, latino, power, chair, state_leg, majority, maj_leader, min_leader,
+         meddist, leslag, freshman, seniority, lesclassic:benchratio1)
+
+senate_filtered = senate_les |> 
+  filter(congress == 116) |> 
+  select(icpsr, elected, female, subchr, afam, latino, power, chair, state_leg, majority, maj_leader, min_leader,
+         meddist,lagles, freshman, seniority, lesclassic:benchratio1) |> 
+  mutate(speaker = 0) |> 
+  rename("leslag" = "lagles")
+
+full_les = house_filtered |> 
+  bind_rows(senate_filtered)
+```
+
+```{r}
+# select relevant columns
+house_elections = house_import |> 
+  filter(year %in% c(2018, 2022)) |> 
+  select(year, state_po, district, candidate, party, candidatevotes, totalvotes) |> 
+  mutate(pct = round(candidatevotes/totalvotes, 4)) |> 
+  mutate(dist_code = str_c(state_po, district, sep = "-")) |> 
+  group_by(dist_code, year) |> 
+  filter(candidatevotes == max(candidatevotes)) |> 
+  ungroup()
+```
+
+```{r}
+senate_elections = sen_import |> 
+  filter(year >= 2020) |> 
+  select(year, state_po, candidate, party_simplified, candidatevotes, totalvotes) |> 
+  mutate(pct = round(candidatevotes/totalvotes, 4)) |> 
+  mutate(dist_code = str_c(state_po, "SEN", sep = "-")) |> 
+  group_by(year, dist_code) |> 
+  filter(candidatevotes == max(candidatevotes))
+```
+
+# Build Full Dataset 
+```{r}
+data = dw_nominate |> 
+  left_join(full_les)
+
+naniar::vis_miss(data)
+```
+

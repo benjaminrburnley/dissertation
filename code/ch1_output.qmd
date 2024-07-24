@@ -1,0 +1,428 @@
+---
+title: "Chapter 1 Output"
+author: "Ben Burnley"
+institute: "Georgetown University"
+format: 
+  html:
+    self-contained: true
+    warning: false
+    code-fold: true
+---
+```{r}
+#| include: false
+# packages needed
+library(tidyverse)
+library(dotwhisker)
+library(broom)
+library(sandwich)
+library(ggrepel)
+library(stringr)
+library(rebus)
+library(jsonlite)
+library(srvyr)
+library(here)
+```
+
+```{r}
+#| include: false
+
+# import data
+load(here::here("data/member_counts.Rdata"))
+
+# wrangle 
+data = data |> 
+  select(bioname, state_abbrev, icpsr, bioguide_id, total_tweets, official:campaign_RT, party_leader, committee_leader, dem, nominate_dim1, nominate_dim2, meddist,
+         born, votepct, benchmark1, deleg_size:state_leg, female, chamber, election_year, majority, maj_leader, min_leader, freshman, seniority, allbill1:alllaw1, congress) |> 
+  mutate(age = if_else(congress == 116, 2019 - born, 2021 - born),
+         chr_or_rank = if_else(chair + subchr > 0 | committee_leader == 1, 1, 0),
+         party_leader = if_else(maj_leader + min_leader > 0, 1, 0),
+         senate = if_else(chamber == "Senate", 1, 0),
+         avg_daily_tweets = case_when(
+           congress == "116" ~ total_tweets/730, # different number of days per session
+           congress == "117" ~ total_tweets/729, # need different denominators per stat
+           TRUE ~ NA),
+         congress_name = case_when(
+           congress == "116" ~ "116th Congress",
+           congress == "117" ~ "117th Congress",
+           TRUE ~ NA
+         ),
+         bioname = str_to_title(bioname)
+         ) |> 
+  group_by(senate, dem) |> 
+  mutate(cm_tweets = mean(total_tweets, na.rm = T),
+         cm_official = mean(official, na.rm = T),
+         cm_campaign = mean(campaign, na.rm = T)) |> 
+  ungroup() |> 
+  mutate(leader = if_else(party_leader == 1 | committee_leader == 1, 1, 0),
+         tweeter = if_else(total_tweets > cm_tweets, 1, 0),
+         vocal_leader = if_else(party_leader == 1, 1, 0),
+         quiet_leader = if_else(party_leader == 0 & committee_leader == 1, 1, 0),
+         backbencher = if_else(leader == 0 & tweeter == 0, 1, 0),
+         influencer = if_else(leader == 0 & tweeter == 1, 1, 0),
+         group = case_when(
+           vocal_leader == 1 ~ "Party Leader",
+           quiet_leader == 1 ~ "Committee Leader",
+           backbencher == 1 ~ "Rank-and-File",
+           influencer == 1 ~ "Tweeter",
+         ))
+
+tweet_group_id = data |> 
+  select(icpsr, bioguide_id, dem, party_leader, committee_leader, maj_leader, min_leader, chair, subchr, group, bioname, congress)
+
+write_csv(tweet_group_id, file = here::here("data/tweet_group_id.csv"))
+```
+
+# Verasight Survey Data 
+```{r}
+survey = read_csv("verasight_apsa/survey.csv") 
+```
+
+# One for Each Category 
+```{r}
+data |> 
+  filter(!is.na(group)) |> 
+  group_by(group, congress_name) |> 
+  summarize(avg_tweets = mean(avg_daily_tweets)) |> 
+  ggplot(aes(reorder(group, -avg_tweets), avg_tweets, fill = group))+
+  geom_col()+
+  theme_bw()+
+  facet_wrap(~congress_name)+ 
+  labs(
+    x = NULL,
+    y = "Average Daily Tweets"
+  )+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none",
+    axis.text.x = element_text(angle = 8)
+  )
+```
+
+```{r}
+data |> 
+  filter(!is.na(group)) |> 
+  filter(congress == 117) |> 
+  group_by(group) |> 
+  count()
+```
+
+# Party Leaders
+```{r}
+data |> 
+  mutate(party_leader = case_when(
+      party_leader == 1 ~ "Party Leader",
+      party_leader == 0 ~ "Rest of Congress",
+      TRUE ~ NA)
+  )|> 
+  filter(!is.na(party_leader)) |> 
+  group_by(party_leader, congress_name)|> 
+  summarize(avg_daily_tweets = mean(avg_daily_tweets)) |> 
+  ggplot(aes(party_leader, avg_daily_tweets, fill = party_leader))+
+  geom_col()+
+  facet_wrap(~congress_name)+
+  scale_fill_manual(values = c("#1E88E5", "#FFC107"))+
+  theme_bw()+
+  labs(
+    x = NULL,
+    y = "Average Daily Tweets"
+  )+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+```
+
+# Committee Leaders 
+```{r}
+data |> 
+  mutate(committee_leader = case_when(
+      committee_leader == 1 ~ "Commitee Leader",
+      committee_leader == 0 ~ "Rest of Congress",
+      TRUE ~ NA)
+  ) |> 
+  filter(!is.na(committee_leader)) |> 
+  group_by(committee_leader, congress_name) |> 
+  summarize(avg_daily_tweets = mean(avg_daily_tweets)) |> 
+  ggplot(aes(committee_leader, avg_daily_tweets, fill = committee_leader))+
+  geom_col()+
+  facet_wrap(~congress_name)+
+  scale_fill_manual(values = c("#1E88E5", "#FFC107"))+
+  theme_bw()+
+  labs(
+    caption = "Committee leaders include chairs and ranking members",
+    x = NULL,
+    y = "Average Daily Tweets"
+  )+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+```
+```{r}
+# import new data 
+tweets = read_rds(here("data/congresstweets")) |> 
+  filter(time >= ymd("2019-01-03")) |> 
+  filter(time <= ymd("2023-01-02")) |> 
+  mutate(congress = if_else(time <= ymd("2021-01-03"), 116, 117))
+
+# import user ids
+users = fromJSON(here("data/historical-users-filtered.json")) |> 
+  mutate(bioguide = id$bioguide)
+
+# import cross walk
+crosswalk = read_csv(here("data/bioguide_icpsr_crosswalk.csv"))
+
+# group id 
+groups = read_csv(here("data/tweet_group_id.csv")) |> 
+  unique()
+
+# wrangle 
+names = users |> 
+  filter(chamber %in% c("house", "senate")) |> 
+  unnest_longer(col = accounts) |> 
+  mutate(account_id = accounts$id, 
+         screen_name = accounts$screen_name,
+         account_type = accounts$account_type,
+         prev_names = accounts$prev_names,
+         bioguide = id$bioguide,
+         gov_track = id$govtrack) |> 
+  filter(type == "member")
+
+
+# merge
+data = tweets |> 
+  left_join(names, by = c("user_id" = "account_id")) |> 
+  left_join(groups, by = c("bioguide" = "bioguide_id", "congress" = "congress")) |> 
+  mutate(day = date(time),
+         week = week(time), 
+         year = year(time),
+         party = case_when(
+             party == "I" ~ "D",
+             party == "L" ~ "R",
+             TRUE ~ party
+           )) |> 
+  filter(!is.na(group))
+```
+
+```{r}
+group_counts = groups |> 
+  filter(!is.na(group)) |> 
+  group_by(group, congress) |> 
+  count(name = "total_members")
+
+data |> 
+  select(group, day) |> 
+  mutate(congress = if_else(day <= "2021-01-03", 116, 117)) |> 
+  group_by(group, day, congress) |> 
+  count() |> 
+  left_join(group_counts, by = c("group", "congress")) |> 
+  mutate(tweets = n/total_members) |> 
+  ggplot(aes(day, total_tweets, color = group))+
+  geom_line()+
+  theme(
+    legend.position = "bottom"
+  )
+  
+  
+```
+
+
+# Twitter Usage and Ideology
+```{r}
+data |> 
+  filter(congress == 116) |> 
+  mutate(label = str_to_title(str_split_i(bioname,",", i = 1))) |>  
+  filter(!is.na(nominate_dim1)) |> 
+  mutate(party = if_else(nominate_dim1 < 0, "Democrat", "Republican")) |> 
+  ggplot(aes(nominate_dim1, total_tweets, color = party))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = "glm", se = F, method.args = list(family = "poisson"))+
+  scale_color_manual(values = c("dodgerblue", "red"))+
+  geom_text_repel(aes(label = label))+
+  theme_bw()+
+  labs(
+    title = "Twitter Activity and Ideology",
+    subtitle = "116th Congress",
+    x = "DW-Nominate (1st Dimension)",
+    y = "Total # of Tweets",
+    color = NULL
+  )
+
+data |> 
+  filter(congress == 117) |> 
+  mutate(label = str_to_title(str_split_i(bioname,",", i = 1))) |>  
+  filter(!is.na(nominate_dim1)) |> 
+  mutate(party = if_else(nominate_dim1 < 0, "Democrat", "Republican")) |> 
+  ggplot(aes(nominate_dim1, total_tweets, color = party))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = "glm", se = F, method.args = list(family = "poisson"))+
+  scale_color_manual(values = c("dodgerblue", "red"))+
+  geom_text_repel(aes(label = label))+
+  theme_bw()+
+  labs(
+    title = "Twitter Activity and Ideology",
+    subtitle = "117th Congress",
+    x = "DW-Nominate (1st Dimension)",
+    y = "Total # of Tweets",
+    color = NULL
+  )
+```
+
+# Tweets by Distance from Floor Median 
+```{r}
+
+```
+
+
+# Appendix 
+
+```{r}
+pois1 = glm(total_tweets ~ party_leader + committee_leader + meddist + majority + seniority + power + senate + votepct  + election_year + state_leg + dem + afam + latino + female + age + freshman, data = data, family = "poisson")
+pois2 = glm(official ~ party_leader + committee_leader + meddist + majority + seniority + power + senate + votepct  + election_year + state_leg +dem + afam + latino + female + age + freshman, data = data, family = "poisson")
+pois3 = glm(campaign ~ party_leader + committee_leader + meddist + majority + seniority + power + senate + votepct  + election_year + state_leg +dem + afam + latino + female + age + freshman, data = data, family = "poisson")
+
+# get robust standard errors 
+p1_vcov = vcovHC(pois1, type = "HC0")
+p2_vcov = vcovHC(pois2, type = "HC0")
+p3_vcov = vcovHC(pois3, type = "HC0")
+
+p1_se = tibble(robust_se = sqrt(diag(p1_vcov)))
+p2_se = tibble(robust_se = sqrt(diag(p2_vcov)))
+p3_se = tibble(robust_se = sqrt(diag(p3_vcov)))
+
+
+# figure 2 ----------------------------------------------------------------
+p1_out = tidy(pois1, exponentiate = F) |> 
+  bind_cols(p1_se) |> 
+  mutate(p_value = 2 * pnorm(abs(estimate/robust_se), lower.tail = FALSE),
+         sig = case_when(
+           p_value < 0.001 ~ "***",
+           p_value < 0.01 ~ "**",
+           p_value < 0.05 ~ "*",
+           TRUE ~ "NO"
+         ),
+         LL = estimate - 1.96 * robust_se,
+         UL = estimate + 1.96 * robust_se, 
+         model = "All Accounts")
+
+p2_out = tidy(pois2) |> 
+  bind_cols(p2_se) |> 
+  mutate(p_value = 2 * pnorm(abs(estimate/robust_se), lower.tail = FALSE),
+         sig = case_when(
+           p_value < 0.001 ~ "***",
+           p_value < 0.01 ~ "**",
+           p_value < 0.05 ~ "*",
+           TRUE ~ "NO"
+         ),
+         LL = estimate - 1.96 * robust_se,
+         UL = estimate + 1.96 * robust_se,
+         model = "Official")
+
+p3_out = tidy(pois3) |> 
+  bind_cols(p3_se) |> 
+  mutate(p_value = 2 * pnorm(abs(estimate/robust_se), lower.tail = FALSE),
+         sig = case_when(
+           p_value < 0.001 ~ "***",
+           p_value < 0.01 ~ "**",
+           p_value < 0.05 ~ "*",
+           TRUE ~ "NO"
+         ),
+         LL = estimate - 1.96 * robust_se,
+         UL = estimate + 1.96 * robust_se, 
+         model = "Campaign")
+
+poisson_out = p1_out |> 
+  bind_rows(p2_out, p3_out) |> 
+  filter(term != "(Intercept)")|> 
+  mutate(term = case_when(
+    term == "party_leader" ~ "Party Leader",
+    term == "committee_leader" ~ "Committee Leader",
+    term == "seniority" ~ "Seniority",
+    term == "senate" ~ "Senate",
+    term == "majority" ~ "Majority",
+    term == "power" ~ "Power Committee",
+    term == "state_leg" ~ "State Legislator",
+    term == "dem" ~ "Democrat",
+    term == "meddist" ~ "Distance from Floor Median",
+    term == "votepct" ~ "Vote % Last Election",
+    term == "election_year" ~ "Election Year",
+    term == "female" ~ "Female",
+    term == "afam" ~ "Black",
+    term == "latino" ~ "Latino",
+    term == "freshman" ~ "Freshman",
+    term == "age" ~ "Age"
+  )) |> 
+  mutate(term = factor(term, levels = rev(c("Party Leader", "Committee Leader", "Seniority", "Senate",
+                                        "Majority", "Power Committee", "Democrat", "State Legislator","Distance from Floor Median", "Vote % Last Election",
+                                        "Election Year","Black", "Latino", "Female", "Freshman", "Age")))) |> 
+  mutate(exp_est = exp(estimate), exp_LL = exp(LL), exp_UL = exp(UL))
+
+ggplot(poisson_out, aes(term, estimate))+
+  geom_point()+
+  geom_errorbar(aes(ymin = LL, ymax = UL), width = 0.15)+
+  coord_flip()+
+  facet_wrap(~model)+
+  theme_bw()+
+  geom_hline(yintercept = 0, color = "red", alpha = 0.5, linetype = "dashed")+
+  labs(
+    x = NULL,
+    color = "Significance",
+    y = "Poisson Estimates",
+    caption = "95% confidence intervals shown using robust standard errors."
+  )
+```
+
+
+```{r}
+data |> 
+  mutate(tweeter = case_when(
+      tweeter == 1 ~ "Tweeter",
+      tweeter == 0 ~ "Everyone Else",
+      TRUE ~ NA
+    )
+  ) |> 
+  filter(!is.na(tweeter)) |> 
+  group_by(tweeter, congress_name) |> 
+  summarize(avg_daily_tweets = mean(avg_daily_tweets)) |> 
+  ggplot(aes(reorder(tweeter, -avg_daily_tweets), avg_daily_tweets, fill = tweeter))+
+  geom_col()+
+  facet_wrap(~congress_name)+
+  scale_fill_manual(values = c("#1E88E5", "#FFC107"))+
+  theme_bw()+
+  labs(
+    title = "Average Daily Tweets By Tweeter Status",
+    caption = "Committee leaders include chairs and ranking members",
+    x = NULL,
+    y = "Average Daily Tweets"
+  )+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+```
+```{r}
+data |> 
+  mutate(
+    backbencher = case_when(
+      backbencher == 1 ~ "Rank-and-File",
+      backbencher == 0 ~ "Everyone Else",
+      TRUE ~ NA)
+  ) |> 
+  filter(!is.na(backbencher)) |> 
+  group_by(backbencher, congress_name) |> 
+  summarize(avg_daily_tweets = mean(avg_daily_tweets)) |> 
+  ggplot(aes(reorder(backbencher, -avg_daily_tweets), avg_daily_tweets, fill = backbencher))+
+  geom_col()+
+  facet_wrap(~congress_name)+
+  scale_fill_manual(values = c( "#1E88E5","#FFC107"))+
+  theme_bw()+
+  labs(
+    title = "Average Daily Tweets By Tweeter Status",
+    caption = "Committee leaders include chairs and ranking members",
+    x = NULL,
+    y = "Average Daily Tweets"
+  )+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
